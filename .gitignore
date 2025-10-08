@@ -1,0 +1,49 @@
+# Node.js / React (frontend)
+frontend/node_modules/
+frontend/.vite/
+frontend/.vite-temp/
+frontend/.env
+frontend/dist/
+frontend/build/
+frontend/.DS_Store
+frontend/.eslintcache
+frontend/.parcel-cache/
+frontend/.next/
+frontend/.nuxt/
+frontend/.cache/
+frontend/yarn-error.log
+frontend/npm-debug.log
+frontend/package-lock.json
+
+# Python (backend)
+env/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/app/api/__pycache__/
+backend/app/core/__pycache__/
+backend/app/models/__pycache__/
+backend/app/services/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.egg-info/
+*.log
+*.env
+backend/.env
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.coverage
+backend/.vscode/
+backend/.DS_Store
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
