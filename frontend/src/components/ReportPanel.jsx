@@ -18,47 +18,30 @@ import DownloadIcon from '@mui/icons-material/Download';
 
 const API_URL = 'http://127.0.0.1:8000';
 
-/**
- * A smart reporting panel that generates different types of reports
- * based on the available data (batch results vs. full dataset evaluation).
- */
 const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
   const [aiSummary, setAiSummary] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
-
-  // Determine the current mode based on which results are available.
-  // Full report mode takes precedence.
-  // We default to 'deepseek' since that's the key you have set.
   const [selectedProvider, setSelectedProvider] = useState('deepseek');
+
   const isFullReportMode = !!datasetResults;
   const isBatchSummaryMode = !!batchResults && !datasetResults;
 
-  // Clear the panel's state whenever the model or input data changes
   useEffect(() => {
     setAiSummary('');
     setStatusMessage('');
   }, [modelMetadata, batchResults, datasetResults]);
 
-  /**
-   * Generates an AI summary. Calls a different backend endpoint depending
-   * on whether we have a full evaluation or just batch predictions.
-   */
   const handleGenerateSummary = async () => {
     setIsAiLoading(true);
     setAiSummary('');
-    setStatusMessage('Generating AI-powered report...');
+    setStatusMessage(`Generating AI report with ${selectedProvider}...`);
     setMessageType('info');
 
-        try {
+    try {
       let response;
-      // --- FIX 2: Add 'params' to the axios call to send the provider choice ---
-      const config = {
-        params: {
-          provider: selectedProvider
-        }
-      };
+      const config = { params: { provider: selectedProvider } };
 
       if (isFullReportMode) {
         const requestBody = { evaluation_data: datasetResults };
@@ -80,41 +63,49 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     }
   };
 
-  /**
-   * Exports the full HTML report. This is only available for
-   * a complete dataset evaluation.
-   */
-  const handleExportReport = async () => {
-    if (!isFullReportMode || !aiSummary) {
-      setStatusMessage('Export is only available for a full dataset evaluation report after an AI summary has been generated.');
+  // --- THIS IS THE FIX FOR THE EXPORT BUTTON ---
+  const handleExportReport = () => {
+    if (!aiSummary) {
+      setStatusMessage('Please generate an AI summary before exporting.');
       setMessageType('warning');
       return;
     }
 
-    try {
-      const requestBody = {
-        evaluation_data: datasetResults,
-        ai_summary: { summary_html: aiSummary }
-      };
-      const response = await axios.post(`${API_URL}/api/export/evaluation`, requestBody, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'evaluation_report.html');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
-        setStatusMessage('Failed to export report.');
-        setMessageType('error');
-    }
-  };
+    // Create a full, self-contained HTML document as a string
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <title>AI Generated Report</title>
+          <style>
+              body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #333; background-color: #f9f9f9; }
+              h1, h2 { border-bottom: 1px solid #ccc; padding-bottom: 5px; color: #111; }
+              ul { padding-left: 20px; }
+              li { margin-bottom: 0.5em; }
+          </style>
+      </head>
+      <body>
+          <h1>AI Generated Report</h1>
+          ${aiSummary}
+      </body>
+      </html>
+    `;
 
-  /**
-   * Renders the content of the panel based on the current state.
-   */
+    // Create a Blob (a file-like object) from the HTML string
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = window.URL.createObjectURL(blob);
+
+    // Create a temporary link element to trigger the download
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'ai_report.html'); // The name of the downloaded file
+    document.body.appendChild(link);
+    link.click(); // Programmatically click the link
+    link.remove(); // Clean up by removing the link
+  };
+  // --- END FIX ---
+
   const getPanelContent = () => {
     if (!modelMetadata) {
       return <Alert severity="warning">Load a model to enable reporting.</Alert>;
@@ -133,7 +124,6 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
             : 'A batch processing run is complete. Select a provider and generate a qualitative summary.'}
         </Typography>
 
-        {/* --- FIX 3: Add the dropdown menu UI --- */}
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel id="provider-select-label">AI Provider</InputLabel>
           <Select
@@ -152,8 +142,9 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
           <Button variant="contained" color="secondary" startIcon={<AutoFixHighIcon />} onClick={handleGenerateSummary} disabled={isAiLoading}>
             {isAiLoading ? <CircularProgress size={24} color="inherit" /> : buttonText}
           </Button>
-          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportReport} disabled={!isFullReportMode || !aiSummary}>
-            Export Full Report
+          {/* --- FIX: Change button text and disabled logic --- */}
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportReport} disabled={!aiSummary}>
+            Export Report
           </Button>
         </Box>
         
