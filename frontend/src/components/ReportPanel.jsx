@@ -15,6 +15,8 @@ import {
 } from '@mui/material';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import DownloadIcon from '@mui/icons-material/Download';
+// Import the PDF generation library
+import jsPDF from 'jspdf';
 
 const API_URL = 'http://127.0.0.1:8000';
 
@@ -63,48 +65,45 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     }
   };
 
-  // --- THIS IS THE FIX FOR THE EXPORT BUTTON ---
-  const handleExportReport = () => {
+  /**
+   * Exports the currently displayed AI summary as a PDF document
+   * with a custom header.
+   */
+  const handleExportReport = async () => {
     if (!aiSummary) {
       setStatusMessage('Please generate an AI summary before exporting.');
       setMessageType('warning');
       return;
     }
 
-    // Create a full, self-contained HTML document as a string
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <title>AI Generated Report</title>
-          <style>
-              body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #333; background-color: #f9f9f9; }
-              h1, h2 { border-bottom: 1px solid #ccc; padding-bottom: 5px; color: #111; }
-              ul { padding-left: 20px; }
-              li { margin-bottom: 0.5em; }
-          </style>
-      </head>
-      <body>
-          <h1>AI Generated Report</h1>
-          ${aiSummary}
-      </body>
-      </html>
-    `;
+    // 1. Create a new PDF document instance
+    const doc = new jsPDF();
 
-    // Create a Blob (a file-like object) from the HTML string
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = window.URL.createObjectURL(blob);
+    // 2. Add the custom header
+    doc.setFontSize(18);
+    doc.text("AI Generated Report", 14, 22); // Title
 
-    // Create a temporary link element to trigger the download
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'ai_report.html'); // The name of the downloaded file
-    document.body.appendChild(link);
-    link.click(); // Programmatically click the link
-    link.remove(); // Clean up by removing the link
+    doc.setFontSize(11);
+    const reportDate = new Date().toLocaleString();
+    doc.text(`Generated on: ${reportDate}`, 14, 30); // Timestamp
+
+    // Add a separator line
+    doc.line(14, 35, 196, 35); // from (x1, y1) to (x2, y2)
+    const reportHtml = `<div style="color: black;">${aiSummary}</div>`;
+    // 3. Render the HTML content onto the PDF
+    // The .html() method is asynchronous.
+    await doc.html(reportHtml, {
+      callback: function (doc) {
+        // This function is called after the HTML is rendered.
+        // It saves the document, which triggers the download in the browser.
+        doc.save('ai_report.pdf');
+      },
+      x: 14,       // Left margin
+      y: 45,       // Top margin (position below the header)
+      width: 170,  // Content width (A4 is 210mm wide, so 210 - 2*margins)
+      windowWidth: 650 // Virtual window width for the HTML renderer
+    });
   };
-  // --- END FIX ---
 
   const getPanelContent = () => {
     if (!modelMetadata) {
@@ -142,7 +141,6 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
           <Button variant="contained" color="secondary" startIcon={<AutoFixHighIcon />} onClick={handleGenerateSummary} disabled={isAiLoading}>
             {isAiLoading ? <CircularProgress size={24} color="inherit" /> : buttonText}
           </Button>
-          {/* --- FIX: Change button text and disabled logic --- */}
           <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportReport} disabled={!aiSummary}>
             Export Report
           </Button>
