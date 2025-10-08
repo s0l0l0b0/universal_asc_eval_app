@@ -1,7 +1,8 @@
 import litellm
+import re
 from app.core.config import settings
 from app.models.evaluation_schemas import EvaluationResponse
-litellm._turn_on_debug() # Keep this for debugging, you can remove it later
+# litellm._turn_on_debug() # Keep this for debugging, you can remove it later
 
 
 
@@ -73,7 +74,11 @@ async def generate_summary(request_data: EvaluationResponse, provider: str) -> s
             api_key=provider_key
         )
         # --- END FIX ---
-        return response.choices[0].message.content
+        summary = response.choices[0].message.content
+
+        cleaned_summary = re.sub(r"^\s*`{3}(html)?\s*|\s*`{3}\s*$", "", summary).strip()
+        
+        return cleaned_summary
     except Exception as e:
         raise AIServiceError(f"Failed to get summary from {provider}: {e}")
 
@@ -118,6 +123,11 @@ async def generate_batch_summary(results: list, provider: str) -> str:
             api_key=provider_key
         )
         # --- END FIX ---
-        return response.choices[0].message.content
+        summary = response.choices[0].message.content
+        
+        cleaned_summary = re.sub(r"^\s*`{3}(html)?\s*|\s*`{3}\s*$", "", summary).strip()
+        
+        return cleaned_summary
+    
     except Exception as e:
         raise AIServiceError(f"Failed to get summary from {provider}: {e}")
