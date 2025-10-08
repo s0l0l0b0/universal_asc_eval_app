@@ -7,7 +7,11 @@ import {
   CircularProgress,
   Alert,
   Paper,
-  Chip
+  Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -26,6 +30,8 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
 
   // Determine the current mode based on which results are available.
   // Full report mode takes precedence.
+  // We default to 'deepseek' since that's the key you have set.
+  const [selectedProvider, setSelectedProvider] = useState('deepseek');
   const isFullReportMode = !!datasetResults;
   const isBatchSummaryMode = !!batchResults && !datasetResults;
 
@@ -45,15 +51,20 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     setStatusMessage('Generating AI-powered report...');
     setMessageType('info');
 
-    try {
+        try {
       let response;
+      // --- FIX 2: Add 'params' to the axios call to send the provider choice ---
+      const config = {
+        params: {
+          provider: selectedProvider
+        }
+      };
+
       if (isFullReportMode) {
-        // Generate a full performance report with metrics
         const requestBody = { evaluation_data: datasetResults };
-        response = await axios.post(`${API_URL}/api/ai/summary`, requestBody);
+        response = await axios.post(`${API_URL}/api/ai/summary`, requestBody, config);
       } else if (isBatchSummaryMode) {
-        // Generate a simpler qualitative summary of predictions
-        response = await axios.post(`${API_URL}/api/ai/summarize_predictions`, batchResults);
+        response = await axios.post(`${API_URL}/api/ai/summarize_predictions`, batchResults, config);
       } else {
         throw new Error("No data available to generate a report.");
       }
@@ -118,9 +129,24 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
       <>
         <Typography paragraph sx={{ color: 'text.secondary' }}>
           {isFullReportMode 
-            ? 'A full dataset evaluation is complete. You can generate a comprehensive performance report with accuracy metrics and analysis.' 
-            : 'A batch processing run is complete. You can generate a qualitative summary of the predictions.'}
+            ? 'A full dataset evaluation is complete. Select a provider and generate a comprehensive performance report.' 
+            : 'A batch processing run is complete. Select a provider and generate a qualitative summary.'}
         </Typography>
+
+        {/* --- FIX 3: Add the dropdown menu UI --- */}
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel id="provider-select-label">AI Provider</InputLabel>
+          <Select
+            labelId="provider-select-label"
+            value={selectedProvider}
+            label="AI Provider"
+            onChange={(e) => setSelectedProvider(e.target.value)}
+          >
+            <MenuItem value="openai">OpenAI</MenuItem>
+            <MenuItem value="anthropic">Anthropic</MenuItem>
+            <MenuItem value="deepseek">DeepSeek</MenuItem>
+          </Select>
+        </FormControl>
 
         <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
           <Button variant="contained" color="secondary" startIcon={<AutoFixHighIcon />} onClick={handleGenerateSummary} disabled={isAiLoading}>
@@ -130,19 +156,17 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
             Export Full Report
           </Button>
         </Box>
-
+        
         {statusMessage && <Alert severity={messageType} sx={{ mt: 2 }}>{statusMessage}</Alert>}
         
-        {/* Show overall accuracy chip if available, before AI summary is generated */}
         {isFullReportMode && datasetResults && !aiSummary && (
           <Box sx={{mt: 2}}>
              <Chip label={`Overall Accuracy: ${(datasetResults.overall_accuracy * 100).toFixed(2)}%`} color="primary" />
           </Box>
         )}
 
-        {/* Display the generated AI summary */}
         {aiSummary && (
-          <Paper sx={{ p: 2, mt: 2, maxHeight: '60vh', overflowY: 'auto' }} dangerouslySetInnerHTML={{ __html: aiSummary }} />
+          <Paper sx={{ p: 2, mt: 2, maxHeight: '50vh', overflowY: 'auto' }} dangerouslySetInnerHTML={{ __html: aiSummary }} />
         )}
       </>
     );
