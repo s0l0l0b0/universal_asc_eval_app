@@ -15,7 +15,6 @@ import {
 } from '@mui/material';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import DownloadIcon from '@mui/icons-material/Download';
-// Import the PDF generation library
 import jsPDF from 'jspdf';
 
 const API_URL = 'http://127.0.0.1:8000';
@@ -65,44 +64,124 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     }
   };
 
-  /**
-   * Exports the currently displayed AI summary as a PDF document
-   * with a custom header.
-   */
-  const handleExportReport = async () => {
+  const handleExportReport = () => {
     if (!aiSummary) {
       setStatusMessage('Please generate an AI summary before exporting.');
       setMessageType('warning');
       return;
     }
 
-    // 1. Create a new PDF document instance
     const doc = new jsPDF();
 
-    // 2. Add the custom header
+    // === HEADER SECTION ===
     doc.setFontSize(18);
-    doc.text("AI Generated Report", 14, 22); // Title
-
+    doc.setTextColor(0, 0, 0); // Black color
+    doc.text("AI Generated Report", 14, 22);
+    
     doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0); // Black color
     const reportDate = new Date().toLocaleString();
-    doc.text(`Generated on: ${reportDate}`, 14, 30); // Timestamp
+    doc.text(`Generated on: ${reportDate}`, 14, 30);
+    doc.line(14, 35, 196, 35);
 
-    // Add a separator line
-    doc.line(14, 35, 196, 35); // from (x1, y1) to (x2, y2)
-    const reportHtml = `<div style="color: black;">${aiSummary}</div>`;
-    // 3. Render the HTML content onto the PDF
-    // The .html() method is asynchronous.
-    await doc.html(reportHtml, {
-      callback: function (doc) {
-        // This function is called after the HTML is rendered.
-        // It saves the document, which triggers the download in the browser.
-        doc.save('ai_report.pdf');
-      },
-      x: 14,       // Left margin
-      y: 45,       // Top margin (position below the header)
-      width: 170,  // Content width (A4 is 210mm wide, so 210 - 2*margins)
-      windowWidth: 650 // Virtual window width for the HTML renderer
+    // === EXTRACT PLAIN TEXT FROM HTML ===
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = aiSummary;
+    
+    // Process the HTML to preserve some structure
+    let textContent = '';
+    
+    // Walk through the elements to preserve headings and structure
+    const processNode = (node, indent = 0) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent.trim();
+        if (text) {
+          textContent += ' '.repeat(indent) + text + '\n';
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const tagName = node.tagName.toLowerCase();
+        
+        // Add spacing before headings
+        if (tagName.match(/^h[1-6]$/)) {
+          textContent += '\n';
+        }
+        
+        // Process children
+        node.childNodes.forEach(child => {
+          if (tagName === 'li') {
+            processNode(child, indent + 2);
+          } else {
+            processNode(child, indent);
+          }
+        });
+        
+        // Add spacing after certain elements
+        if (tagName.match(/^(h[1-6]|p|li|div)$/)) {
+          textContent += '\n';
+        }
+        
+        // Add bullet for list items
+        if (tagName === 'li') {
+          const text = node.textContent.trim();
+          if (text) {
+            textContent = textContent.trimEnd() + '\n';
+          }
+        }
+      }
+    };
+    
+    processNode(tempDiv);
+    
+    // Fallback to simple text extraction if processing fails
+    if (!textContent.trim()) {
+      textContent = tempDiv.innerText || tempDiv.textContent;
+    }
+
+    // === ADD TEXT CONTENT TO PDF ===
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0); // Ensure black text
+    
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const margin = 14;
+    const maxLineWidth = pageWidth - (margin * 2);
+    
+    // Split text into lines that fit the page width
+    const lines = doc.splitTextToSize(textContent, maxLineWidth);
+    
+    let y = 45; // Starting Y position (after header)
+    const lineHeight = 7;
+    const bottomMargin = 20;
+    
+    lines.forEach((line, index) => {
+      // Check if we need a new page
+      if (y > pageHeight - bottomMargin) {
+        doc.addPage();
+        y = 20; // Reset Y position for new page
+      }
+      
+      // Check if line looks like a heading (simple heuristic)
+      const isHeading = line.trim().length < 50 && 
+                       line.trim().length > 0 && 
+                       (index === 0 || lines[index - 1].trim() === '');
+      
+      if (isHeading) {
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+      } else {
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+      }
+      
+      doc.text(line, margin, y);
+      y += lineHeight;
     });
+
+    // === SAVE THE PDF ===
+    doc.save('ai_report.pdf');
+    
+    setStatusMessage('Report exported successfully!');
+    setMessageType('success');
   };
 
   const getPanelContent = () => {
@@ -149,9 +228,7 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
         {statusMessage && <Alert severity={messageType} sx={{ mt: 2 }}>{statusMessage}</Alert>}
         
         {isFullReportMode && datasetResults && !aiSummary && (
-          <Box sx={{mt: 2}}>
-             <Chip label={`Overall Accuracy: ${(datasetResults.overall_accuracy * 100).toFixed(2)}%`} color="primary" />
-          </Box>
+          <Box sx={{mt: 2}}><Chip label={`Overall Accuracy: ${(datasetResults.overall_accuracy * 100).toFixed(2)}%`} color="primary" /></Box>
         )}
 
         {aiSummary && (
