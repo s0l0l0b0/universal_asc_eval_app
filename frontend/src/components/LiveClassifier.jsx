@@ -43,7 +43,7 @@ function bufferToWav(buffer, sampleRate) {
 }
 
 
-const LiveClassifier = ({ modelMetadata }) => {
+const LiveClassifier = ({ modelMetadata, onLivePrediction }) => {
   const [isListening, setIsListening] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [latestPrediction, setLatestPrediction] = useState(null);
@@ -126,6 +126,11 @@ const LiveClassifier = ({ modelMetadata }) => {
 
       const response = await axios.post(`${API_URL}/api/audio/predict`, formData);
       setLatestPrediction(response.data);
+
+      // --- NEW: Report the prediction to the parent component ---
+      if (onLivePrediction) {
+        onLivePrediction(response.data);
+      }
 
     } catch (error) {
       console.error("Prediction error:", error);

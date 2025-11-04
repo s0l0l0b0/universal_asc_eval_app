@@ -9,18 +9,17 @@ import ScienceIcon from '@mui/icons-material/Science';
 
 const API_URL = 'http://127.0.0.1:8000';
 
-const BatchClassifier = ({ modelMetadata, onBatchComplete }) => {
+// MODIFIED: Accept `batchResults` as a prop and remove its local state management
+const BatchClassifier = ({ modelMetadata, onBatchComplete, batchResults }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [batchResults, setBatchResults] = useState([]);
   const [fileUrls, setFileUrls] = useState({}); // To store URLs for audio playback
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [messageType, setMessageType] = useState('info');
 
-  // Clear results when a new model is loaded
+  // Clear local state when a new model is loaded. Parent clears batchResults.
   useEffect(() => {
     setSelectedFiles([]);
-    setBatchResults([]);
     setFileUrls({});
   }, [modelMetadata]);
 
@@ -42,7 +41,6 @@ const BatchClassifier = ({ modelMetadata, onBatchComplete }) => {
 
     setSelectedFiles(validFiles);
 
-    // Create temporary URLs for playback
     const urls = {};
     validFiles.forEach(file => {
       urls[file.name] = URL.createObjectURL(file);
@@ -58,25 +56,22 @@ const BatchClassifier = ({ modelMetadata, onBatchComplete }) => {
     }
 
     setStatusMessage('');
-    setBatchResults([]); // Clear previous results
+    onBatchComplete([]); // Clear previous results in the parent state
 
     setIsLoading(true);
-    setBatchResults([]); // Clear previous results
     setStatusMessage(`Processing ${selectedFiles.length} files...`);
     setMessageType('info');
 
     const formData = new FormData();
     selectedFiles.forEach(file => {
-      // The key 'files' must match the FastAPI endpoint parameter name
       formData.append('files', file);
     });
 
     try {
-      // REQ-SW-001: Call the /api/audio/batch endpoint
       const response = await axios.post(`${API_URL}/api/audio/batch`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setBatchResults(response.data.results);
+      // CRITICAL CHANGE: Call the handler from props instead of setting local state
       onBatchComplete(response.data.results);
       setStatusMessage('Batch processing complete.');
       setMessageType('success');
@@ -84,7 +79,7 @@ const BatchClassifier = ({ modelMetadata, onBatchComplete }) => {
       const detail = error.response ? error.response.data.detail : 'Could not connect to the server.';
       setStatusMessage(`Error: ${detail}`);
       setMessageType('error');
-      setBatchResults([]);
+      // CRITICAL CHANGE: Clear results in the parent on error
       onBatchComplete([]);
     } finally {
       setIsLoading(false);
@@ -93,8 +88,7 @@ const BatchClassifier = ({ modelMetadata, onBatchComplete }) => {
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>2. Classifier</Typography>
-      
+      {/* This section now uses the `modelMetadata` prop as before */}
       {!modelMetadata ? (
         <Alert severity="warning">Please load a model first before using the classifier.</Alert>
       ) : (
@@ -138,8 +132,8 @@ const BatchClassifier = ({ modelMetadata, onBatchComplete }) => {
             <Alert severity={messageType} sx={{ mt: 2 }}>{statusMessage}</Alert>
           )}
 
-          {/* REQ-003-3: Results Display and Management */}
-          {batchResults.length > 0 && (
+          {/* This table now correctly reads from the `batchResults` prop */}
+          {batchResults && batchResults.length > 0 && (
             <TableContainer component={Paper} sx={{ mt: 3, maxHeight: 400 }}>
               <Table stickyHeader size="small">
                 <TableHead>
