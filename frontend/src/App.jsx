@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Box, Grid, CssBaseline, Typography, Paper } from '@mui/material';
+import { Box, CssBaseline, Typography, Paper } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import ModelLoader from './components/ModelLoader';
 import ClassifierPanel from './components/ClassifierPanel';
 import ReportPanel from './components/ReportPanel';
@@ -47,8 +48,7 @@ function App() {
           Universal Audio Classification & Evaluation App
         </Typography>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={3}>
-            {/* LAYOUT FIX: Added height: '100%' */}
+          <Grid size={{ xs: 12, md: 3 }}>
             <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
               <ModelLoader 
                 onUploadSuccess={handleUploadSuccess} 
@@ -58,8 +58,7 @@ function App() {
               />
             </Paper>
           </Grid>
-          <Grid item xs={12} md={5}>
-            {/* LAYOUT FIX: Added height: '100%' */}
+          <Grid size={{ xs: 12, md: 5 }}>
             <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
               <ClassifierPanel 
                 modelMetadata={modelMetadata}
@@ -70,8 +69,7 @@ function App() {
               />
             </Paper>
           </Grid>
-          <Grid item xs={12} md={4}>
-            {/* LAYOUT FIX: Added height: '100%' */}
+          <Grid size={{ xs: 12, md: 4 }}>
             <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
               <ReportPanel 
                 modelMetadata={modelMetadata}
