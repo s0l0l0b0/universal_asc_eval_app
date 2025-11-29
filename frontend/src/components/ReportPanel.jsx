@@ -11,15 +11,26 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Tooltip,
+  IconButton
 } from '@mui/material';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import DownloadIcon from '@mui/icons-material/Download';
+import SettingsIcon from '@mui/icons-material/Settings';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import jsPDF from 'jspdf';
 
 const API_URL = 'http://127.0.0.1:8000';
 
-const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
+const PROVIDER_INFO = {
+  openai: { name: 'OpenAI', model: 'GPT-4o' },
+  anthropic: { name: 'Anthropic', model: 'Claude 3 Haiku' },
+  deepseek: { name: 'DeepSeek', model: 'DeepSeek Chat' }
+};
+
+const ReportPanel = ({ modelMetadata, batchResults, datasetResults, apiSettings, onOpenSettings }) => {
   const [aiSummary, setAiSummary] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
@@ -27,7 +38,12 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
   const [selectedProvider, setSelectedProvider] = useState('deepseek');
 
   const isFullReportMode = !!datasetResults;
-  const isBatchSummaryMode = !!batchResults && !datasetResults;
+  const isBatchSummaryMode = !!batchResults && batchResults.length > 0 && !datasetResults;
+
+  // Check if selected provider has API key configured
+  const isProviderConfigured = (provider) => {
+    return apiSettings && apiSettings[provider] && apiSettings[provider].trim().length > 10;
+  };
 
   useEffect(() => {
     setAiSummary('');
@@ -35,14 +51,26 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
   }, [modelMetadata, batchResults, datasetResults]);
 
   const handleGenerateSummary = async () => {
+    // Check if API key is configured
+    if (!isProviderConfigured(selectedProvider)) {
+      setStatusMessage(`Please configure your ${PROVIDER_INFO[selectedProvider].name} API key in Settings.`);
+      setMessageType('error');
+      return;
+    }
+
     setIsAiLoading(true);
     setAiSummary('');
-    setStatusMessage(`Generating AI report with ${selectedProvider}...`);
+    setStatusMessage(`Generating AI report with ${PROVIDER_INFO[selectedProvider].name}...`);
     setMessageType('info');
 
     try {
       let response;
-      const config = { params: { provider: selectedProvider } };
+      const config = { 
+        params: { provider: selectedProvider },
+        headers: {
+          'X-API-Key': apiSettings[selectedProvider]
+        }
+      };
 
       if (isFullReportMode) {
         const requestBody = { evaluation_data: datasetResults };
@@ -75,11 +103,11 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
 
     // === HEADER SECTION ===
     doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0); // Black color
+    doc.setTextColor(0, 0, 0);
     doc.text("AI Generated Report", 14, 22);
     
     doc.setFontSize(11);
-    doc.setTextColor(0, 0, 0); // Black color
+    doc.setTextColor(0, 0, 0);
     const reportDate = new Date().toLocaleString();
     doc.text(`Generated on: ${reportDate}`, 14, 30);
     doc.line(14, 35, 196, 35);
@@ -88,10 +116,8 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = aiSummary;
     
-    // Process the HTML to preserve some structure
     let textContent = '';
     
-    // Walk through the elements to preserve headings and structure
     const processNode = (node, indent = 0) => {
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent.trim();
@@ -101,12 +127,10 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
       } else if (node.nodeType === Node.ELEMENT_NODE) {
         const tagName = node.tagName.toLowerCase();
         
-        // Add spacing before headings
         if (tagName.match(/^h[1-6]$/)) {
           textContent += '\n';
         }
         
-        // Process children
         node.childNodes.forEach(child => {
           if (tagName === 'li') {
             processNode(child, indent + 2);
@@ -115,12 +139,10 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
           }
         });
         
-        // Add spacing after certain elements
         if (tagName.match(/^(h[1-6]|p|li|div)$/)) {
           textContent += '\n';
         }
         
-        // Add bullet for list items
         if (tagName === 'li') {
           const text = node.textContent.trim();
           if (text) {
@@ -132,35 +154,31 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     
     processNode(tempDiv);
     
-    // Fallback to simple text extraction if processing fails
     if (!textContent.trim()) {
       textContent = tempDiv.innerText || tempDiv.textContent;
     }
 
     // === ADD TEXT CONTENT TO PDF ===
     doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0); // Ensure black text
+    doc.setTextColor(0, 0, 0);
     
     const pageWidth = doc.internal.pageSize.width;
     const pageHeight = doc.internal.pageSize.height;
     const margin = 14;
     const maxLineWidth = pageWidth - (margin * 2);
     
-    // Split text into lines that fit the page width
     const lines = doc.splitTextToSize(textContent, maxLineWidth);
     
-    let y = 45; // Starting Y position (after header)
+    let y = 45;
     const lineHeight = 7;
     const bottomMargin = 20;
     
     lines.forEach((line, index) => {
-      // Check if we need a new page
       if (y > pageHeight - bottomMargin) {
         doc.addPage();
-        y = 20; // Reset Y position for new page
+        y = 20;
       }
       
-      // Check if line looks like a heading (simple heuristic)
       const isHeading = line.trim().length < 50 && 
                        line.trim().length > 0 && 
                        (index === 0 || lines[index - 1].trim() === '');
@@ -177,7 +195,6 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
       y += lineHeight;
     });
 
-    // === SAVE THE PDF ===
     doc.save('ai_report.pdf');
     
     setStatusMessage('Report exported successfully!');
@@ -193,15 +210,17 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
     }
     
     const buttonText = isFullReportMode ? 'Generate Full AI Report' : 'Generate Batch Summary';
+    const currentProviderConfigured = isProviderConfigured(selectedProvider);
 
     return (
       <>
-        <Typography paragraph sx={{ color: 'text.secondary' }}>
+        <Typography paragraph sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
           {isFullReportMode 
             ? 'A full dataset evaluation is complete. Select a provider and generate a comprehensive performance report.' 
             : 'A batch processing run is complete. Select a provider and generate a qualitative summary.'}
         </Typography>
 
+        {/* Provider Selection */}
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel id="provider-select-label">AI Provider</InputLabel>
           <Select
@@ -210,29 +229,108 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
             label="AI Provider"
             onChange={(e) => setSelectedProvider(e.target.value)}
           >
-            <MenuItem value="openai">OpenAI</MenuItem>
-            <MenuItem value="anthropic">Anthropic</MenuItem>
-            <MenuItem value="deepseek">DeepSeek</MenuItem>
+            {Object.entries(PROVIDER_INFO).map(([key, info]) => (
+              <MenuItem key={key} value={key}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <Box>
+                    <Typography component="span">{info.name}</Typography>
+                    <Typography component="span" sx={{ color: 'text.secondary', ml: 1, fontSize: '0.85rem' }}>
+                      ({info.model})
+                    </Typography>
+                  </Box>
+                  {isProviderConfigured(key) ? (
+                    <CheckCircleIcon sx={{ color: 'success.main', fontSize: 18, ml: 1 }} />
+                  ) : (
+                    <ErrorOutlineIcon sx={{ color: 'text.disabled', fontSize: 18, ml: 1 }} />
+                  )}
+                </Box>
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
 
-        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-          <Button variant="contained" color="secondary" startIcon={<AutoFixHighIcon />} onClick={handleGenerateSummary} disabled={isAiLoading}>
-            {isAiLoading ? <CircularProgress size={24} color="inherit" /> : buttonText}
-          </Button>
-          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportReport} disabled={!aiSummary}>
-            Export Report
+        {/* API Key Warning */}
+        {!currentProviderConfigured && (
+          <Alert 
+            severity="warning" 
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={onOpenSettings} startIcon={<SettingsIcon />}>
+                Configure
+              </Button>
+            }
+          >
+            {PROVIDER_INFO[selectedProvider].name} API key not configured.
+          </Alert>
+        )}
+
+        {/* Action Buttons */}
+        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          <Tooltip title={!currentProviderConfigured ? 'Configure API key first' : ''}>
+            <span>
+              <Button 
+                variant="contained" 
+                color="secondary" 
+                startIcon={<AutoFixHighIcon />} 
+                onClick={handleGenerateSummary} 
+                disabled={isAiLoading || !currentProviderConfigured}
+                sx={{
+                  background: currentProviderConfigured 
+                    ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)'
+                    : undefined,
+                  '&:hover': {
+                    background: currentProviderConfigured 
+                      ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
+                      : undefined,
+                  }
+                }}
+              >
+                {isAiLoading ? <CircularProgress size={24} color="inherit" /> : buttonText}
+              </Button>
+            </span>
+          </Tooltip>
+          <Button 
+            variant="outlined" 
+            startIcon={<DownloadIcon />} 
+            onClick={handleExportReport} 
+            disabled={!aiSummary}
+          >
+            Export PDF
           </Button>
         </Box>
         
         {statusMessage && <Alert severity={messageType} sx={{ mt: 2 }}>{statusMessage}</Alert>}
         
         {isFullReportMode && datasetResults && !aiSummary && (
-          <Box sx={{mt: 2}}><Chip label={`Overall Accuracy: ${(datasetResults.overall_accuracy * 100).toFixed(2)}%`} color="primary" /></Box>
+          <Box sx={{mt: 2}}>
+            <Chip 
+              label={`Overall Accuracy: ${(datasetResults.overall_accuracy * 100).toFixed(2)}%`} 
+              color="primary" 
+            />
+          </Box>
         )}
 
         {aiSummary && (
-          <Paper sx={{ p: 2, mt: 2, maxHeight: '50vh', overflowY: 'auto' }} dangerouslySetInnerHTML={{ __html: aiSummary }} />
+          <Paper 
+            sx={{ 
+              p: 2, 
+              mt: 2, 
+              maxHeight: '50vh', 
+              overflowY: 'auto',
+              '& h1, & h2, & h3': {
+                color: '#1a1a2e',
+                marginTop: 2,
+                marginBottom: 1,
+              },
+              '& p': {
+                marginBottom: 1,
+              },
+              '& ul, & ol': {
+                paddingLeft: 3,
+              }
+            }} 
+            dangerouslySetInnerHTML={{ __html: aiSummary }} 
+          />
         )}
       </>
     );
@@ -240,7 +338,14 @@ const ReportPanel = ({ modelMetadata, batchResults, datasetResults }) => {
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>3. Report Panel</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h6">3. Report Panel</Typography>
+        <Tooltip title="API Settings">
+          <IconButton size="small" onClick={onOpenSettings}>
+            <SettingsIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
       {getPanelContent()}
     </Box>
   );

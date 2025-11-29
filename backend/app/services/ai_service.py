@@ -1,15 +1,9 @@
 import litellm
 import re
+from typing import Optional
 from app.core.config import settings
 from app.models.evaluation_schemas import EvaluationResponse
 # litellm._turn_on_debug()
-
-# This code runs only ONCE when the server starts.
-# print("\n--- [STARTUP DEBUG] Reading API Keys from Settings ---")
-# print(f"OpenAI Key Loaded:    '{settings.OPENAI_API_KEY}'")
-# print(f"Anthropic Key Loaded: '{settings.ANTHROPIC_API_KEY}'")
-# print(f"DeepSeek Key Loaded:  '{settings.DEEPSEEK_API_KEY}'")
-# print("------------------------------------------------------\n")
 
 PROVIDER_MODELS = {
     "openai": "gpt-4o",
@@ -17,7 +11,8 @@ PROVIDER_MODELS = {
     "deepseek": "deepseek/deepseek-chat"
 }
 
-PROVIDER_KEYS = {
+# Environment variable keys (fallback)
+ENV_PROVIDER_KEYS = {
     "openai": settings.OPENAI_API_KEY,
     "anthropic": settings.ANTHROPIC_API_KEY,
     "deepseek": settings.DEEPSEEK_API_KEY
@@ -26,6 +21,27 @@ PROVIDER_KEYS = {
 class AIServiceError(Exception):
     """Custom exception for AI service errors."""
     pass
+
+
+def _get_api_key(provider: str, api_key: Optional[str] = None) -> str:
+    """
+    Get the API key for the provider.
+    Priority: 1) Provided api_key, 2) Environment variable
+    """
+    # Use provided API key if available
+    if api_key and api_key.strip():
+        return api_key.strip()
+    
+    # Fall back to environment variable
+    env_key = ENV_PROVIDER_KEYS.get(provider.lower())
+    if env_key and env_key != "default_key_if_not_set":
+        return env_key
+    
+    raise AIServiceError(
+        f"API key for '{provider}' not provided. "
+        f"Please configure it in Settings or set the environment variable."
+    )
+
 
 # --- Function 1: For Full Dataset Evaluation Reports ---
 
@@ -47,11 +63,16 @@ def _construct_full_report_prompt(report: EvaluationResponse) -> str:
     """
     return prompt
 
-async def generate_summary(request_data: EvaluationResponse, provider: str) -> str:
-    """Generates an intelligent summary for a full evaluation report."""
-    provider_key = PROVIDER_KEYS.get(provider.lower())
-    if not provider_key or provider_key == "default_key_if_not_set":
-        raise AIServiceError(f"API key for '{provider}' not configured in the .env file.")
+async def generate_summary(request_data: EvaluationResponse, provider: str, api_key: Optional[str] = None) -> str:
+    """
+    Generates an intelligent summary for a full evaluation report.
+    
+    Args:
+        request_data: The evaluation response data
+        provider: The AI provider to use (openai, anthropic, deepseek)
+        api_key: Optional API key. If not provided, falls back to environment variable.
+    """
+    provider_key = _get_api_key(provider, api_key)
 
     model_name = PROVIDER_MODELS.get(provider.lower())
     if not model_name:
@@ -94,11 +115,16 @@ def _construct_batch_summary_prompt(results: list) -> str:
     """
     return prompt
 
-async def generate_batch_summary(results: list, provider: str) -> str:
-    """Generates a qualitative summary for a list of batch predictions."""
-    provider_key = PROVIDER_KEYS.get(provider.lower())
-    if not provider_key or provider_key == "default_key_if_not_set":
-        raise AIServiceError(f"API key for '{provider}' not configured in the .env file.")
+async def generate_batch_summary(results: list, provider: str, api_key: Optional[str] = None) -> str:
+    """
+    Generates a qualitative summary for a list of batch predictions.
+    
+    Args:
+        results: List of batch prediction results
+        provider: The AI provider to use (openai, anthropic, deepseek)
+        api_key: Optional API key. If not provided, falls back to environment variable.
+    """
+    provider_key = _get_api_key(provider, api_key)
 
     model_name = PROVIDER_MODELS.get(provider.lower())
     if not model_name:
